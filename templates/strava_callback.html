@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head><title>Strava Authorization</title></head>
+<body>
+<script>
+{% if success %}
+    if (window.opener) {
+        window.opener.postMessage({type: 'strava-connected', athlete: {{ athlete_name|tojson }}}, window.location.origin);
+    }
+    window.close();
+{% else %}
+    const errorMessage = {{ error|tojson }};
+    if (window.opener) {
+        window.opener.postMessage({type: 'strava-error', error: errorMessage}, window.location.origin);
+    }
+    const message = document.createElement('p');
+    message.style.cssText = 'font-family:sans-serif;text-align:center;margin-top:40px';
+    message.textContent = `Authorization failed: ${errorMessage} — You can close this window.`;
+    document.body.appendChild(message);
+{% endif %}
+</script>
+</body>
+</html>

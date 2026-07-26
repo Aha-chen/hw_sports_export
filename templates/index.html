@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Huawei to Strava - Next Gen</title>
+    <!-- Tailwind CSS (pre-compiled) -->
+    <link rel="stylesheet" href="/static/vendor/tailwind.css">
+    <!-- Alpine.js for lightweight reactivity -->
+    <script defer src="/static/vendor/alpine.min.js"></script>
+    <!-- Phosphor Icons (local) -->
+    <link rel="stylesheet" href="/static/vendor/phosphor.css">
+    <link rel="stylesheet" href="/static/vendor/phosphor-fill.css">
+    <link rel="stylesheet" href="/static/vendor/phosphor-bold.css">
+    <!-- Fonts (local) -->
+    <link rel="stylesheet" href="/static/vendor/fonts/fonts.css">
+
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="app-body min-h-screen flex flex-col items-center justify-center py-12 px-4 sm:px-6 relative overflow-x-hidden bg-slate-50 dark:bg-[#0a0a0a] text-slate-800 dark:text-gray-100 transition-colors duration-500"
+      x-data="appData()">
+
+    <!-- Ambient Background Elements -->
+    <div class="tech-background fixed inset-0 w-full h-full overflow-hidden pointer-events-none -z-10 transition-colors duration-500">
+        <div class="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] rounded-full bg-red-400/30 dark:bg-red-600/20 mix-blend-multiply dark:mix-blend-screen filter blur-[120px] opacity-70 animate-blob transition-colors duration-500"></div>
+        <div class="absolute top-[20%] right-[-10%] w-[400px] h-[400px] rounded-full bg-orange-400/30 dark:bg-orange-600/20 mix-blend-multiply dark:mix-blend-screen filter blur-[120px] opacity-70 animate-blob transition-colors duration-500" style="animation-delay: 2s"></div>
+        <div class="absolute bottom-[-20%] left-[20%] w-[600px] h-[600px] rounded-full bg-purple-400/30 dark:bg-purple-600/10 mix-blend-multiply dark:mix-blend-screen filter blur-[120px] opacity-50 animate-blob transition-colors duration-500" style="animation-delay: 4s"></div>
+        <!-- Grid overlay -->
+        <div class="absolute inset-0 grid-bg opacity-50 transition-all duration-500"></div>
+    </div>
+
+    <!-- Toggles (Theme & Lang) -->
+    <div class="topbar fixed top-6 right-6 z-50 flex items-center gap-3">
+        <button @click="toggleTheme" class="glass px-3 py-2 rounded-full text-sm font-medium text-slate-600 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white transition-all hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-center w-10 h-10">
+            <i class="ph text-xl transition-all" :class="theme === 'dark' ? 'ph-moon' : 'ph-sun'"></i>
+        </button>
+        <button @click="toggleLang" class="glass px-4 py-2 rounded-full text-sm font-medium text-slate-600 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white transition-all hover:bg-black/5 dark:hover:bg-white/10 flex items-center gap-2 h-10">
+            <i class="ph ph-translate text-lg"></i>
+            <span x-text="lang === 'zh' ? 'EN' : '中文'"></span>
+        </button>
+    </div>
+
+    <div class="app-shell w-full max-w-4xl z-10 flex flex-col gap-8 animate-fade-in-up">
+        
+        <!-- Header -->
+        <div class="hero-header text-center space-y-3">
+            <div class="eyebrow"><span class="eyebrow-dot"></span><span>LOCAL DATA PIPELINE</span><span class="eyebrow-line"></span></div>
+            <div class="inline-flex items-center justify-center p-3 rounded-2xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 mb-2 backdrop-blur-md transition-colors duration-500">
+                <i class="ph-fill ph-activity text-3xl text-brand-500"></i>
+            </div>
+            <h1 class="text-4xl md:text-5xl font-bold tracking-tight text-slate-900 dark:text-white transition-colors duration-500">
+                <span x-text="t.title_huawei"></span> <span class="text-slate-400 dark:text-white/30 font-light mx-2 transition-colors duration-500" x-text="t.title_to"></span> <span x-text="t.title_strava"></span>
+            </h1>
+            <p class="hero-subtitle text-slate-500 dark:text-zinc-400 text-base md:text-lg max-w-xl mx-auto font-light transition-colors duration-500" x-text="t.subtitle">
+            </p>
+        </div>
+
+        <!-- Main Workspace -->
+        <div class="workspace-card glass rounded-3xl p-1 md:p-2 relative">
+            <div class="bg-white/80 dark:bg-dark-800/80 rounded-[1.35rem] p-6 md:p-8 transition-colors duration-500">
+                
+                <form @submit.prevent="submitForm" class="upload-form space-y-8" x-show="status !== 'success'">
+                    <div class="workflow-strip">
+                        <div class="workflow-step active"><span>01</span><b x-text="lang === 'zh' ? '导入数据' : 'Import'" ></b></div>
+                        <div class="workflow-connector"></div>
+                        <div class="workflow-step" :class="{'active': status === 'loading'}"><span>02</span><b x-text="lang === 'zh' ? '解析转换' : 'Convert'"></b></div>
+                        <div class="workflow-connector"></div>
+                        <div class="workflow-step"><span>03</span><b x-text="lang === 'zh' ? '导出到 Strava' : 'Export'" ></b></div>
+                    </div>
+                    
+                    <!-- Drag & Drop Zone -->
+                    <div class="space-y-2">
+                        <label class="block text-sm font-medium text-slate-700 dark:text-zinc-300 ml-1 transition-colors duration-500" x-text="t.upload_label"></label>
+                        <div class="drop-zone relative border-2 border-dashed border-slate-300 dark:border-zinc-700 rounded-2xl p-10 flex flex-col items-center justify-center cursor-pointer group hover:border-brand-500 dark:hover:border-zinc-500 hover:bg-slate-50 dark:hover:bg-zinc-800/50 transition-colors duration-500"
+                             :class="{ 'active': dragActive }"
+                             @dragover.prevent="dragActive = true"
+                             @dragleave.prevent="dragActive = false"
+                             @drop.prevent="handleDrop($event)"
+                             @click="$refs.fileInput.click()">
+                            
+                            <input type="file" x-ref="fileInput" name="file" accept=".zip" class="hidden" @change="handleFileSelect($event)">
+                            
+                            <div class="w-16 h-16 rounded-full bg-slate-100 dark:bg-zinc-800 flex items-center justify-center mb-4 group-hover:scale-110 transition-all duration-300 shadow-inner border border-slate-200 dark:border-zinc-700">
+                                <i class="ph ph-file-zip text-3xl text-slate-400 dark:text-zinc-400 group-hover:text-brand-500 transition-colors"></i>
+                            </div>
+                            
+                            <template x-if="!file">
+                                <div class="text-center">
+                                    <p class="text-lg font-medium text-slate-800 dark:text-white mb-1 transition-colors duration-500" x-text="t.upload_prompt"></p>
+                                    <p class="text-sm text-slate-500 dark:text-zinc-500 transition-colors duration-500" x-text="t.upload_hint"></p>
+                                </div>
+                            </template>
+                            
+                            <template x-if="file">
+                                <div class="text-center animate-fade-in-up">
+                                    <p class="text-lg font-medium text-brand-500 mb-1 transition-colors duration-500" x-text="file.name"></p>
+                                    <p class="text-sm text-slate-500 dark:text-zinc-400 transition-colors duration-500" x-text="(file.size / 1024 / 1024).toFixed(2) + ' MB'"></p>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Password -->
+                        <div class="space-y-2 md:col-span-2">
+                            <label for="password" class="block text-sm font-medium text-slate-700 dark:text-zinc-300 ml-1 flex justify-between transition-colors duration-500">
+                                <span><span x-text="t.pwd_label"></span> <span class="text-brand-500">*</span></span>
+                                <span class="text-xs text-slate-500 dark:text-zinc-500 font-normal transition-colors duration-500" x-text="t.pwd_hint"></span>
+                            </label>
+                            <div class="relative">
+                                <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                    <i class="ph ph-lock-key text-slate-400 dark:text-zinc-500 text-lg transition-colors duration-500"></i>
+                                </div>
+                                <input :type="showPassword ? 'text' : 'password'" id="password" x-model="password" required
+                                    class="w-full glass-input rounded-xl pl-11 pr-12 py-3.5 text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-zinc-600 font-mono text-sm"
+                                    :placeholder="t.pwd_placeholder">
+                                <button type="button" @click="showPassword = !showPassword" 
+                                    class="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 dark:text-zinc-500 hover:text-slate-600 dark:hover:text-zinc-300 transition-colors focus:outline-none">
+                                    <i class="ph text-lg" :class="showPassword ? 'ph-eye-slash' : 'ph-eye'"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Start Date -->
+                        <div class="space-y-2 relative" x-data="datePickerData('start')">
+                            <label class="block text-sm font-medium text-slate-700 dark:text-zinc-300 ml-1 transition-colors duration-500"><span x-text="t.start_date"></span> <span class="text-slate-500 dark:text-zinc-600 font-normal ml-1 transition-colors duration-500" x-text="t.optional"></span></label>
+                            <div class="relative cursor-pointer" @click="togglePicker" @click.away="closePicker">
+                                <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                    <i class="ph ph-calendar-blank text-slate-400 dark:text-zinc-500 text-lg transition-colors duration-500"></i>
+                                </div>
+                                <input type="text" readonly :value="formattedDate"
+                                    class="w-full glass-input rounded-xl pl-11 pr-4 py-3.5 text-slate-800 dark:text-white text-sm cursor-pointer"
+                                    placeholder="YYYY-MM-DD">
+                                <input type="hidden" x-model="startDate" id="start_date" name="start_date">
+                                
+                                <!-- Custom Dropdown -->
+                                <div x-show="isOpen" 
+                                     x-transition:enter="transition ease-out duration-200"
+                                     x-transition:enter-start="opacity-0 scale-95 -translate-y-2"
+                                     x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+                                     x-transition:leave="transition ease-in duration-150"
+                                     x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+                                     x-transition:leave-end="opacity-0 scale-95 -translate-y-2"
+                                     class="absolute top-full mt-2 left-0 w-[280px] glass bg-white/95 dark:bg-dark-800/95 rounded-2xl p-4 z-50 shadow-2xl border border-slate-200/50 dark:border-zinc-700/50 date-picker-popup transition-colors duration-500" x-cloak @click.stop>
+                                     
+                                    <!-- Header -->
+                                    <div class="flex items-center justify-between mb-4">
+                                        <button type="button" @click="prevMonth" class="w-8 h-8 rounded-full flex items-center justify-center text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-zinc-700/50 transition-colors">
+                                            <i class="ph-bold ph-caret-left"></i>
+                                        </button>
+                                        <div class="font-medium text-slate-800 dark:text-white select-none transition-colors duration-500" x-text="monthNames[month] + ' ' + year"></div>
+                                        <button type="button" @click="nextMonth" class="w-8 h-8 rounded-full flex items-center justify-center text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-zinc-700/50 transition-colors">
+                                            <i class="ph-bold ph-caret-right"></i>
+                                        </button>
+                                    </div>
+                                    
+                                    <!-- Days Header -->
+                                    <div class="calendar-grid mb-2">
+                                        <template x-for="day in dayNames">
+                                            <div class="text-center text-[10px] font-semibold text-slate-400 dark:text-zinc-500 uppercase tracking-wider transition-colors duration-500" x-text="day"></div>
+                                        </template>
+                                    </div>
+                                    
+                                    <!-- Days Grid -->
+                                    <div class="calendar-grid">
+                                        <template x-for="blank in blankDays">
+                                            <div class="h-8"></div>
+                                        </template>
+                                        <template x-for="date in daysInMonth" :key="date">
+                                            <div @click="selectDate(date)" 
+                                                 role="button" tabindex="0"
+                                                 class="h-8 flex items-center justify-center rounded-lg text-sm cursor-pointer transition-all duration-200"
+                                                 :class="{
+                                                     'bg-brand-500 text-white font-medium shadow-[0_0_10px_rgba(255,77,77,0.4)]': isSelected(date),
+                                                     'text-slate-600 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-700/50': !isSelected(date),
+                                                     'text-brand-500 dark:text-brand-400 font-medium': isToday(date) && !isSelected(date)
+                                                 }"
+                                                 x-text="date"></div>
+                                        </template>
+                                    </div>
+                                    
+                                    <div class="mt-4 pt-3 border-t border-slate-200/50 dark:border-zinc-700/50 text-right transition-colors duration-500">
+                                        <button type="button" @click="clearDate" class="text-xs text-slate-500 dark:text-zinc-500 hover:text-slate-800 dark:hover:text-white transition-colors" x-text="t.btn_clear"></button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- End Date -->
+                        <div class="space-y-2 relative" x-data="datePickerData('end')">
+                            <label class="block text-sm font-medium text-slate-700 dark:text-zinc-300 ml-1 transition-colors duration-500"><span x-text="t.end_date"></span> <span class="text-slate-500 dark:text-zinc-600 font-normal ml-1 transition-colors duration-500" x-text="t.optional"></span></label>
+                            <div class="relative cursor-pointer" @click="togglePicker" @click.away="closePicker">
+                                <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                    <i class="ph ph-calendar-check text-slate-400 dark:text-zinc-500 text-lg transition-colors duration-500"></i>
+                                </div>
+                                <input type="text" readonly :value="formattedDate"
+                                    class="w-full glass-input rounded-xl pl-11 pr-4 py-3.5 text-slate-800 dark:text-white text-sm cursor-pointer"
+                                    placeholder="YYYY-MM-DD">
+                                <input type="hidden" x-model="endDate" id="end_date" name="end_date">
+                                
+                                <!-- Custom Dropdown -->
+                                <div x-show="isOpen" 
+                                     x-transition:enter="transition ease-out duration-200"
+                                     x-transition:enter-start="opacity-0 scale-95 -translate-y-2"
+                                     x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+                                     x-transition:leave="transition ease-in duration-150"
+                                     x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+                                     x-transition:leave-end="opacity-0 scale-95 -translate-y-2"
+                                     class="absolute top-full mt-2 left-0 w-[280px] glass bg-white/95 dark:bg-dark-800/95 rounded-2xl p-4 z-50 shadow-2xl border border-slate-200/50 dark:border-zinc-700/50 date-picker-popup transition-colors duration-500" x-cloak @click.stop>
+                                     
+                                    <!-- Header -->
+                                    <div class="flex items-center justify-between mb-4">
+                                        <button type="button" @click="prevMonth" class="w-8 h-8 rounded-full flex items-center justify-center text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-zinc-700/50 transition-colors">
+                                            <i class="ph-bold ph-caret-left"></i>
+                                        </button>
+                                        <div class="font-medium text-slate-800 dark:text-white select-none transition-colors duration-500" x-text="monthNames[month] + ' ' + year"></div>
+                                        <button type="button" @click="nextMonth" class="w-8 h-8 rounded-full flex items-center justify-center text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-zinc-700/50 transition-colors">
+                                            <i class="ph-bold ph-caret-right"></i>
+                                        </button>
+                                    </div>
+                                    
+                                    <!-- Days Header -->
+                                    <div class="calendar-grid mb-2">
+                                        <template x-for="day in dayNames">
+                                            <div class="text-center text-[10px] font-semibold text-slate-400 dark:text-zinc-500 uppercase tracking-wider transition-colors duration-500" x-text="day"></div>
+                                        </template>
+                                    </div>
+                                    
+                                    <!-- Days Grid -->
+                                    <div class="calendar-grid">
+                                        <template x-for="blank in blankDays">
+                                            <div class="h-8"></div>
+                                        </template>
+                                        <template x-for="date in daysInMonth" :key="date">
+                                            <div @click="selectDate(date)" 
+                                                 role="button" tabindex="0"
+                                                 class="h-8 flex items-center justify-center rounded-lg text-sm cursor-pointer transition-all duration-200"
+                                                 :class="{
+                                                     'bg-brand-500 text-white font-medium shadow-[0_0_10px_rgba(255,77,77,0.4)]': isSelected(date),
+                                                     'text-slate-600 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-700/50': !isSelected(date),
+                                                     'text-brand-500 dark:text-brand-400 font-medium': isToday(date) && !isSelected(date)
+                                                 }"
+                                                 x-text="date"></div>
+                                        </template>
+                                    </div>
+                                    
+                                    <div class="mt-4 pt-3 border-t border-slate-200/50 dark:border-zinc-700/50 text-right transition-colors duration-500">
+                                        <button type="button" @click="clearDate" class="text-xs text-slate-500 dark:text-zinc-500 hover:text-slate-800 dark:hover:text-white transition-colors" x-text="t.btn_clear"></button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="date-range-error" x-show="dateRangeInvalid" x-cloak x-text="t.date_range_error"></div>
+
+                    <!-- Action Button -->
+                    <button type="submit" 
+                            :disabled="!file || !password || dateRangeInvalid || status === 'loading'"
+                            class="w-full relative overflow-hidden group bg-slate-900 dark:bg-white text-white dark:text-dark-900 font-semibold py-4 rounded-xl transition-all duration-300 transform active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-[0_0_30px_rgba(0,0,0,0.15)] dark:hover:shadow-[0_0_30px_rgba(255,255,255,0.2)] disabled:hover:shadow-none flex items-center justify-center gap-3">
+                        
+                        <span x-show="status !== 'loading'" class="flex items-center gap-2">
+                            <i class="ph-bold ph-magic-wand text-xl"></i>
+                            <span x-text="t.btn_process"></span>
+                        </span>
+                        
+                        <span x-show="status === 'loading'" class="flex flex-col items-center gap-2" x-cloak>
+                            <span class="flex items-center gap-3">
+                                <svg class="animate-spin h-5 w-5 text-white dark:text-dark-900" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                <span x-text="parseProgress.total > 0 ? (parseProgress.current + ' / ' + parseProgress.total) : t.btn_loading"></span>
+                            </span>
+                        </span>
+                    </button>
+
+                    <div class="progress-card" x-show="status === 'loading'" x-cloak>
+                        <div class="progress-meta">
+                            <span class="progress-live"><span class="eyebrow-dot"></span><span x-text="lang === 'zh' ? '正在处理' : 'PROCESSING'"></span></span>
+                            <span class="font-mono" x-text="parseProgress.total > 0 ? Math.round(parseProgress.current / parseProgress.total * 100) + '%' : '—'"></span>
+                        </div>
+                        <div class="progress-track"><div class="progress-bar" :style="{width: (parseProgress.total > 0 ? Math.min(100, parseProgress.current / parseProgress.total * 100) : 8) + '%'}"></div></div>
+                        <div class="progress-detail"><span x-text="parseProgress.activity || (lang === 'zh' ? '等待 worker 接收任务…' : 'Waiting for worker…')"></span><span x-text="parseProgress.total > 0 ? parseProgress.current + ' / ' + parseProgress.total : ''"></span></div>
+                    </div>
+                    
+                    <!-- Error Message -->
+                    <div x-show="error" x-transition.opacity class="bg-red-50/80 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-xl p-4 flex items-start gap-3 mt-4" x-cloak>
+                        <i class="ph-fill ph-warning-circle text-red-500 dark:text-red-400 text-xl shrink-0 mt-0.5"></i>
+                        <div>
+                            <h4 class="text-sm font-semibold text-red-600 dark:text-red-400 transition-colors duration-500" x-text="t.error_title"></h4>
+                            <p class="text-sm text-red-500 dark:text-red-300/80 mt-1 transition-colors duration-500" x-text="error"></p>
+                        </div>
+                    </div>
+                </form>
+
+                <!-- Results View -->
+                <div x-show="status === 'success'" x-transition:enter="transition ease-out duration-500 delay-200" x-transition:enter-start="opacity-0 translate-y-8" x-transition:enter-end="opacity-100 translate-y-0" x-cloak class="results-view space-y-8">
+                    
+                    <div class="text-center space-y-4">
+                        <div class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-green-100 dark:bg-green-500/10 border border-green-200 dark:border-green-500/20 text-green-600 dark:text-green-400 mb-2 shadow-[0_0_40px_rgba(34,197,94,0.2)] transition-colors duration-500">
+                            <i class="ph-bold ph-check text-4xl"></i>
+                        </div>
+                        <h2 class="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white transition-colors duration-500" x-text="resultMessage"></h2>
+                        <p class="text-slate-500 dark:text-zinc-400 text-sm max-w-md mx-auto transition-colors duration-500" x-text="t.success_desc"></p>
+                    </div>
+
+                    <div class="flex flex-wrap justify-center gap-3">
+                        <a :href="downloadUrl" class="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-500 text-white font-medium py-3.5 px-8 rounded-full transition-all duration-300 transform hover:-translate-y-1 shadow-[0_10px_20px_rgba(230,57,70,0.3)]">
+                            <i class="ph-bold ph-download-simple text-lg"></i>
+                            <span x-text="t.btn_download"></span>
+                        </a>
+                        <button x-show="stravaConfigured && stravaConnected && selectedItems.length > 0 && !stravaUploading"
+                                @click="uploadToStrava"
+                                class="inline-flex items-center gap-2 bg-[#FC4C02] hover:bg-[#e04402] text-white font-medium py-3.5 px-8 rounded-full transition-all duration-300 transform hover:-translate-y-1 shadow-[0_10px_20px_rgba(252,76,2,0.3)]" x-cloak>
+                            <i class="ph-bold ph-upload-simple text-lg"></i>
+                            <span x-text="t.strava_upload_btn + ' (' + selectedItems.length + ')'"></span>
+                        </button>
+                        <div x-show="stravaUploading"
+                             class="inline-flex items-center gap-2 bg-[#FC4C02]/80 text-white font-medium py-3.5 px-8 rounded-full" x-cloak>
+                            <svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <span x-text="t.strava_uploading + ' ' + stravaUploadCurrent + '/' + stravaUploadTotal + '...'"></span>
+                        </div>
+                    </div>
+
+                    <!-- Strava Connection Bar -->
+                    <div x-show="stravaConfigured" class="flex items-center justify-center gap-3" x-cloak>
+                        <template x-if="!stravaConnected">
+                            <button @click="connectStrava" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium border border-[#FC4C02]/30 text-[#FC4C02] hover:bg-[#FC4C02] hover:text-white transition-all duration-300">
+                                <svg class="w-4 h-4" viewBox="0 0 16 16" fill="currentColor"><path d="M6.7 13.5L4.5 9.2h3.1l-0.9-1.8H4.1L2 3h3.1l2.1 4.2 2.1-4.2H12L9.3 7.4h2.6l-5.2 6.1z"/></svg>
+                                <span x-text="t.strava_connect"></span>
+                            </button>
+                        </template>
+                        <template x-if="stravaConnected">
+                            <div class="flex items-center gap-3 text-sm">
+                                <div class="flex items-center gap-2 px-4 py-2 rounded-full bg-[#FC4C02]/10 text-[#FC4C02] border border-[#FC4C02]/20">
+                                    <svg class="w-4 h-4" viewBox="0 0 16 16" fill="currentColor"><path d="M6.7 13.5L4.5 9.2h3.1l-0.9-1.8H4.1L2 3h3.1l2.1 4.2 2.1-4.2H12L9.3 7.4h2.6l-5.2 6.1z"/></svg>
+                                    <span x-text="t.strava_connected_as + stravaAthlete"></span>
+                                </div>
+                                <button @click="disconnectStrava" class="text-xs text-slate-500 dark:text-zinc-500 hover:text-slate-800 dark:hover:text-white underline decoration-slate-300 dark:decoration-zinc-700 underline-offset-4 transition-colors" x-text="t.strava_disconnect"></button>
+                            </div>
+                        </template>
+                    </div>
+
+                    <div class="bg-slate-50/80 dark:bg-dark-900/50 rounded-2xl border border-slate-200 dark:border-white/5 overflow-hidden transition-colors duration-500">
+                        <div class="px-6 py-4 border-b border-slate-200 dark:border-white/5 flex justify-between items-center bg-black/[0.02] dark:bg-white/[0.02] transition-colors duration-500">
+                            <div class="flex items-center gap-3">
+                                <button @click="toggleSelectAll()" class="text-slate-400 hover:text-brand-500 transition-colors" :title="isAllSelected ? 'Deselect All' : 'Select All'">
+                                    <i class="ph-fill text-xl" :class="isAllSelected ? 'ph-check-square-offset text-brand-500' : (isIndeterminate ? 'ph-minus-square text-brand-500' : 'ph-square')"></i>
+                                </button>
+                                <h3 class="text-sm font-semibold text-slate-700 dark:text-zinc-300 uppercase tracking-wider transition-colors duration-500" x-text="t.results_title"></h3>
+                            </div>
+                            <span class="text-xs font-mono text-slate-500 dark:text-zinc-500 transition-colors duration-500">
+                                <span x-show="selectedItems.length > 0" class="text-brand-500 font-bold mr-1" x-text="selectedItems.length + ' selected / '"></span>
+                                <span x-text="filteredResults.length + ' ' + t.results_total"></span>
+                            </span>
+                        </div>
+
+                        <!-- 运动类型筛选按钮 -->
+                        <div class="px-6 py-3 border-b border-slate-100 dark:border-white/5 flex flex-wrap gap-2 transition-colors duration-500" x-show="results.length > 0">
+                            <button @click="sportFilter = 'all'; currentPage = 1"
+                                    :class="sportFilter === 'all' ? 'bg-brand-500 text-white' : 'bg-slate-100 dark:bg-zinc-700 text-slate-600 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-600'"
+                                    class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200">
+                                全部
+                            </button>
+                            <button @click="sportFilter = 'Run'; currentPage = 1"
+                                    :class="sportFilter === 'Run' ? 'bg-brand-500 text-white' : 'bg-slate-100 dark:bg-zinc-700 text-slate-600 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-600'"
+                                    class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 flex items-center gap-1">
+                                <i class="ph-fill ph-person-simple-run text-sm"></i>
+                                跑步
+                            </button>
+                            <button @click="sportFilter = 'Cycl'; currentPage = 1"
+                                    :class="sportFilter === 'Cycl' ? 'bg-brand-500 text-white' : 'bg-slate-100 dark:bg-zinc-700 text-slate-600 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-600'"
+                                    class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 flex items-center gap-1">
+                                <i class="ph-fill ph-bicycle text-sm"></i>
+                                骑行
+                            </button>
+                            <button @click="sportFilter = 'Walk'; currentPage = 1"
+                                    :class="sportFilter === 'Walk' ? 'bg-brand-500 text-white' : 'bg-slate-100 dark:bg-zinc-700 text-slate-600 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-600'"
+                                    class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 flex items-center gap-1">
+                                <i class="ph-fill ph-person-simple-walk text-sm"></i>
+                                步行
+                            </button>
+                            <button @click="sportFilter = 'Swim'; currentPage = 1"
+                                    :class="sportFilter === 'Swim' ? 'bg-brand-500 text-white' : 'bg-slate-100 dark:bg-zinc-700 text-slate-600 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-600'"
+                                    class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 flex items-center gap-1">
+                                <i class="ph-fill ph-swimming-pool text-sm"></i>
+                                游泳
+                            </button>
+                            <button @click="sportFilter = 'Other'; currentPage = 1"
+                                    :class="sportFilter === 'Other' ? 'bg-brand-500 text-white' : 'bg-slate-100 dark:bg-zinc-700 text-slate-600 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-600'"
+                                    class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 flex items-center gap-1">
+                                <i class="ph-fill ph-activity text-sm"></i>
+                                其他
+                            </button>
+                        </div>
+
+                        <div class="max-h-[300px] overflow-y-auto p-2">
+                            <table class="w-full text-left border-collapse">
+                                <tbody class="divide-y divide-slate-200 dark:divide-white/5 transition-colors duration-500">
+                                    <template x-for="item in paginatedResults" :key="item.filename">
+                                        <tr class="hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors group cursor-pointer"
+                                            :class="{'bg-brand-500/5 dark:bg-brand-500/10': isSelected(item.filename), 'bg-slate-100 dark:bg-zinc-800': selectedItem && selectedItem.filename === item.filename}"
+                                            @click="openDetails(item, $event)">
+                                            <td class="py-3 px-4 w-10">
+                                                <button @click.stop="toggleSelection(item.filename)" class="text-slate-400 hover:text-brand-500 transition-colors mt-1">
+                                                    <i class="ph-fill text-xl" :class="isSelected(item.filename) ? 'ph-check-square-offset text-brand-500' : 'ph-square'"></i>
+                                                </button>
+                                            </td>
+                                            <td class="py-3 px-2">
+                                                <div class="flex items-center gap-3">
+                                                    <div class="w-8 h-8 rounded-lg bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 flex items-center justify-center text-slate-400 dark:text-zinc-400 group-hover:text-brand-500 dark:group-hover:text-brand-500 group-hover:border-brand-500/30 transition-colors">
+                                                        <i class="ph-fill ph-person-simple-run" x-show="item.sport.includes('Run')"></i>
+                                                        <i class="ph-fill ph-bicycle" x-show="item.sport.includes('Cycl')"></i>
+                                                        <i class="ph-fill ph-person-simple-walk" x-show="item.sport.includes('Walk')"></i>
+                                                        <i class="ph-fill ph-swimming-pool" x-show="item.sport.includes('Swim')"></i>
+                                                        <i class="ph-fill ph-activity" x-show="!item.sport.includes('Run') && !item.sport.includes('Cycl') && !item.sport.includes('Walk') && !item.sport.includes('Swim')"></i>
+                                                    </div>
+                                                    <div>
+                                                        <div class="text-sm font-medium text-slate-800 dark:text-zinc-200 transition-colors duration-500" x-text="item.sport.replaceAll('_', ' ')"></div>
+                                                        <div class="text-xs text-slate-500 dark:text-zinc-500 font-mono mt-0.5 transition-colors duration-500" x-text="item.date"></div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td class="py-3 px-4 text-right">
+                                                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white dark:bg-zinc-800 text-xs font-mono text-slate-600 dark:text-zinc-300 border border-slate-200 dark:border-zinc-700 transition-colors duration-500">
+                                                    <i class="ph-fill ph-map-pin text-slate-400 dark:text-zinc-500"></i>
+                                                    <span x-text="item.points.toLocaleString() + ' pts'"></span>
+                                                </span>
+                                            </td>
+                                            <td class="py-3 px-3 w-10 text-center" x-show="stravaConfigured">
+                                                <template x-if="getUploadStatus(item.filename)?.status === 'uploading' || getUploadStatus(item.filename)?.status === 'processing'">
+                                                    <svg class="animate-spin h-4 w-4 text-[#FC4C02] inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                    </svg>
+                                                </template>
+                                                <template x-if="getUploadStatus(item.filename)?.status === 'success'">
+                                                    <a :href="'https://www.strava.com/activities/' + getUploadStatus(item.filename).activity_id" target="_blank" class="text-green-500 hover:text-green-400" :title="t.strava_status_success">
+                                                        <i class="ph-fill ph-check-circle text-lg"></i>
+                                                    </a>
+                                                </template>
+                                                <template x-if="getUploadStatus(item.filename)?.status === 'duplicate'">
+                                                    <span class="text-amber-500" :title="t.strava_status_duplicate">
+                                                        <i class="ph-fill ph-warning-circle text-lg"></i>
+                                                    </span>
+                                                </template>
+                                                <template x-if="getUploadStatus(item.filename)?.status === 'error'">
+                                                    <span class="text-red-500" :title="getUploadStatus(item.filename)?.error || t.strava_status_error">
+                                                        <i class="ph-fill ph-x-circle text-lg"></i>
+                                                    </span>
+                                                </template>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <!-- Pagination Controls -->
+                        <div class="px-6 py-3 border-t border-slate-200 dark:border-white/5 bg-slate-50/50 dark:bg-dark-900/50 flex items-center justify-between transition-colors duration-500" x-show="totalPages > 1">
+                            <button @click="prevPage" :disabled="currentPage === 1" class="text-xs font-medium px-3 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-700 text-slate-600 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" x-text="t.prev"></button>
+                            <span class="text-xs text-slate-500 dark:text-zinc-400 font-mono"><span x-text="currentPage"></span> / <span x-text="totalPages"></span></span>
+                            <button @click="nextPage" :disabled="currentPage === totalPages" class="text-xs font-medium px-3 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-700 text-slate-600 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" x-text="t.next"></button>
+                        </div>
+                    </div>
+                    
+                    <div class="text-center pt-2">
+                        <button @click="resetForm" class="text-sm text-slate-500 dark:text-zinc-500 hover:text-slate-800 dark:hover:text-white transition-colors underline decoration-slate-300 dark:decoration-zinc-700 underline-offset-4" x-text="t.btn_process_another">
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+        
+        <!-- Footer -->
+        <div class="text-center text-xs text-slate-500 dark:text-zinc-600 transition-colors duration-500" x-text="t.footer">
+        </div>
+    </div>
+    
+    <!-- Activity Details Sidebar -->
+    <div x-show="isSidebarOpen" class="fixed inset-0 z-[100] flex justify-end pointer-events-none" x-cloak>
+        <!-- Backdrop (Optional, but usually we want to click the list so we make it transparent/invisible or remove it. Let's make it invisible but catch clicks if needed. Wait, requirement says: "保持侧边栏状态的同时允许用户继续浏览列表" - meaning NO backdrop that blocks clicks!) -->
+             
+        <!-- Sidebar Panel -->
+        <div x-show="isSidebarOpen"
+             @click.away="closeDetails"
+             x-transition:enter="transition ease-out duration-300 transform"
+             x-transition:enter-start="translate-x-full"
+             x-transition:enter-end="translate-x-0"
+             x-transition:leave="transition ease-in duration-200 transform"
+             x-transition:leave-start="translate-x-0"
+             x-transition:leave-end="translate-x-full"
+             class="relative w-full max-w-sm h-full bg-white/95 dark:bg-dark-800/95 glass shadow-2xl border-l border-slate-200 dark:border-white/10 overflow-y-auto pointer-events-auto transition-colors duration-500 flex flex-col">
+             
+            <template x-if="selectedItem">
+                <div class="p-6 sm:p-8 flex-1">
+                    <!-- Header -->
+                    <div class="flex justify-between items-start mb-8">
+                        <div class="flex items-center gap-4">
+                            <div class="w-12 h-12 rounded-xl bg-slate-100 dark:bg-zinc-800 flex items-center justify-center text-brand-500 border border-slate-200 dark:border-zinc-700 shadow-inner">
+                                <i class="ph-fill ph-person-simple-run text-2xl" x-show="selectedItem.sport.includes('Run')"></i>
+                                <i class="ph-fill ph-bicycle text-2xl" x-show="selectedItem.sport.includes('Cycl')"></i>
+                                <i class="ph-fill ph-person-simple-walk text-2xl" x-show="selectedItem.sport.includes('Walk')"></i>
+                                <i class="ph-fill ph-swimming-pool text-2xl" x-show="selectedItem.sport.includes('Swim')"></i>
+                                <i class="ph-fill ph-activity text-2xl" x-show="!selectedItem.sport.includes('Run') && !selectedItem.sport.includes('Cycl') && !selectedItem.sport.includes('Walk') && !selectedItem.sport.includes('Swim')"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-xl font-bold text-slate-900 dark:text-white transition-colors duration-500" x-text="selectedItem.sport.replaceAll('_', ' ')"></h3>
+                                <p class="text-sm text-slate-500 dark:text-zinc-400 font-mono mt-0.5 transition-colors duration-500" x-text="selectedItem.date"></p>
+                            </div>
+                        </div>
+                        <button @click="closeDetails" class="w-8 h-8 rounded-full flex items-center justify-center bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white transition-colors shrink-0">
+                            <i class="ph-bold ph-x"></i>
+                        </button>
+                    </div>
+                    
+                    <!-- Stats Grid -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <!-- Distance -->
+                        <div class="bg-slate-50 dark:bg-zinc-800/50 p-4 rounded-2xl border border-slate-100 dark:border-zinc-700/50 transition-colors duration-500">
+                            <div class="flex items-center gap-2 text-slate-500 dark:text-zinc-400 mb-1">
+                                <i class="ph-fill ph-map-pin-line"></i>
+                                <span class="text-xs font-medium uppercase tracking-wider" x-text="t.dist"></span>
+                            </div>
+                            <div class="text-2xl font-bold text-slate-900 dark:text-white font-mono transition-colors duration-500" x-text="formatDistance(selectedItem.distance)"></div>
+                        </div>
+                        
+                        <!-- Duration -->
+                        <div class="bg-slate-50 dark:bg-zinc-800/50 p-4 rounded-2xl border border-slate-100 dark:border-zinc-700/50 transition-colors duration-500">
+                            <div class="flex items-center gap-2 text-slate-500 dark:text-zinc-400 mb-1">
+                                <i class="ph-fill ph-clock"></i>
+                                <span class="text-xs font-medium uppercase tracking-wider" x-text="t.time"></span>
+                            </div>
+                            <div class="text-2xl font-bold text-slate-900 dark:text-white font-mono transition-colors duration-500" x-text="formatDuration(selectedItem.duration)"></div>
+                        </div>
+                        
+                        <!-- Heart Rate -->
+                        <div class="bg-slate-50 dark:bg-zinc-800/50 p-4 rounded-2xl border border-slate-100 dark:border-zinc-700/50 transition-colors duration-500">
+                            <div class="flex items-center gap-2 text-red-500/80 mb-1">
+                                <i class="ph-fill ph-heartbeat"></i>
+                                <span class="text-xs font-medium uppercase tracking-wider" x-text="t.avg_hr"></span>
+                            </div>
+                            <div class="flex items-baseline gap-1">
+                                <div class="text-2xl font-bold text-slate-900 dark:text-white font-mono transition-colors duration-500" x-text="selectedItem.avg_hr ? Math.round(selectedItem.avg_hr) : '--'"></div>
+                                <span class="text-xs text-slate-500 font-mono" x-show="selectedItem.avg_hr">bpm</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Cadence -->
+                        <div class="bg-slate-50 dark:bg-zinc-800/50 p-4 rounded-2xl border border-slate-100 dark:border-zinc-700/50 transition-colors duration-500">
+                            <div class="flex items-center gap-2 text-blue-500/80 mb-1">
+                                <i class="ph-fill ph-sneaker"></i>
+                                <span class="text-xs font-medium uppercase tracking-wider" x-text="t.avg_cad"></span>
+                            </div>
+                            <div class="flex items-baseline gap-1">
+                                <div class="text-2xl font-bold text-slate-900 dark:text-white font-mono transition-colors duration-500" x-text="selectedItem.avg_cadence ? Math.round(selectedItem.avg_cadence) : '--'"></div>
+                                <span class="text-xs text-slate-500 font-mono" x-show="selectedItem.avg_cadence">spm</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Calories -->
+                        <div class="col-span-2 bg-slate-50 dark:bg-zinc-800/50 p-4 rounded-2xl border border-slate-100 dark:border-zinc-700/50 flex items-center justify-between transition-colors duration-500">
+                            <div class="flex items-center gap-2 text-orange-500/80">
+                                <i class="ph-fill ph-fire"></i>
+                                <span class="text-xs font-medium uppercase tracking-wider" x-text="t.cal"></span>
+                            </div>
+                            <div class="flex items-baseline gap-1">
+                                <div class="text-2xl font-bold text-slate-900 dark:text-white font-mono transition-colors duration-500" x-text="selectedItem.calories ? Math.round(selectedItem.calories) : '--'"></div>
+                                <span class="text-xs text-slate-500 font-mono" x-show="selectedItem.calories">kcal</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Heart Rate Chart -->
+                    <template x-if="selectedItem.hr_series && selectedItem.hr_series.length > 2">
+                        <div class="mt-6 bg-slate-50 dark:bg-zinc-800/50 rounded-2xl border border-slate-100 dark:border-zinc-700/50 p-4 transition-colors duration-500">
+                            <div class="flex items-center gap-2 text-red-500 mb-3">
+                                <i class="ph-fill ph-heartbeat"></i>
+                                <span class="text-xs font-medium uppercase tracking-wider">心率曲线</span>
+                            </div>
+                            <div class="w-full h-16 relative">
+                                <svg viewBox="0 0 100 30" class="w-full h-full overflow-visible" preserveAspectRatio="none">
+                                    <!-- Heart rate line -->
+                                    <path :d="getChartPath(selectedItem.hr_series, 'hr')" fill="none" stroke="#ef4444" stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round"></path>
+                                    <!-- Gradient fill -->
+                                    <defs>
+                                        <linearGradient id="hrGradient" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="0%" stop-color="#ef4444" stop-opacity="0.2"/>
+                                            <stop offset="100%" stop-color="#ef4444" stop-opacity="0"/>
+                                        </linearGradient>
+                                    </defs>
+                                    <path :d="getChartAreaPath(selectedItem.hr_series, 'hr')" fill="url(#hrGradient)"/>
+                                </svg>
+                            </div>
+                            <div class="flex justify-between text-xs text-slate-400 dark:text-zinc-500 mt-1 font-mono">
+                                <span x-text="selectedItem.hr_series[0]?.time || '0:00'"></span>
+                                <span x-text="'avg ' + (selectedItem.avg_hr ? Math.round(selectedItem.avg_hr) : '--') + ' bpm'"></span>
+                                <span x-text="selectedItem.hr_series[selectedItem.hr_series.length-1]?.time || ''"></span>
+                            </div>
+                        </div>
+                    </template>
+
+                    <!-- Pace Chart -->
+                    <template x-if="selectedItem.pace_series && selectedItem.pace_series.length > 2">
+                        <div class="mt-4 bg-slate-50 dark:bg-zinc-800/50 rounded-2xl border border-slate-100 dark:border-zinc-700/50 p-4 transition-colors duration-500">
+                            <div class="flex items-center gap-2 text-blue-500 mb-3">
+                                <i class="ph-fill ph-timer"></i>
+                                <span class="text-xs font-medium uppercase tracking-wider">配速曲线</span>
+                            </div>
+                            <div class="w-full h-16 relative">
+                                <svg viewBox="0 0 100 30" class="w-full h-full overflow-visible" preserveAspectRatio="none">
+                                    <!-- Pace line -->
+                                    <path :d="getChartPath(selectedItem.pace_series, 'pace')" fill="none" stroke="#3b82f6" stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round"></path>
+                                    <!-- Gradient fill -->
+                                    <defs>
+                                        <linearGradient id="paceGradient" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.2"/>
+                                            <stop offset="100%" stop-color="#3b82f6" stop-opacity="0"/>
+                                        </linearGradient>
+                                    </defs>
+                                    <path :d="getChartAreaPath(selectedItem.pace_series, 'pace')" fill="url(#paceGradient)"/>
+                                </svg>
+                            </div>
+                            <div class="flex justify-between text-xs text-slate-400 dark:text-zinc-500 mt-1 font-mono">
+                                <span x-text="selectedItem.pace_series[0]?.time || '0:00'"></span>
+                                <span x-text="'avg pace'"></span>
+                                <span x-text="selectedItem.pace_series[selectedItem.pace_series.length-1]?.time || ''"></span>
+                            </div>
+                        </div>
+                    </template>
+
+                    <!-- Track Overview -->
+                    <template x-if="selectedItem.path && selectedItem.path.length > 0">
+                        <div class="mt-6 bg-slate-50 dark:bg-zinc-800/50 rounded-2xl border border-slate-100 dark:border-zinc-700/50 p-4 transition-colors duration-500">
+                            <div class="flex items-center gap-2 text-brand-500 mb-4">
+                                <i class="ph-fill ph-path"></i>
+                                <span class="text-xs font-medium uppercase tracking-wider" x-text="t.track"></span>
+                            </div>
+                            <div class="w-full aspect-square relative flex items-center justify-center">
+                                <svg viewBox="0 0 100 100" class="w-full h-full overflow-visible drop-shadow-md">
+                                    <path :d="getSvgPath(selectedItem.path)" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-brand-500"></path>
+                                </svg>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <script src="/static/js/main.js"></script>
+</body>
+</html>

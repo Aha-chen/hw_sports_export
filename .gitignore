@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+venv/
+.DS_Store
+temp/
+uploads/
+exports/
+indoor_output.txt
+.env
+node_modules/
+static/vendor/tailwind-input.css
+
+# 临时调试脚本
+inspect_calories.py
+test_svg.py

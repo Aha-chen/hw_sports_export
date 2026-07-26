@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./temp:/app/temp
+    restart: unless-stopped
+    init: true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - TZ=UTC
+      - ENVIRONMENT=production
+      - COOKIE_SECURE=${COOKIE_SECURE:-0}
+      # Strava direct upload (optional, leave empty to disable)
+      # - STRAVA_CLIENT_ID=your_client_id
+      # - STRAVA_CLIENT_SECRET=your_client_secret
+      # - SESSION_SECRET_KEY=random_secret_string
+
+  worker:
+    build: .
+    command: ["python", "worker.py"]
+    volumes:
+      - ./temp:/app/temp
+    restart: unless-stopped
+    init: true
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - TZ=UTC
+      - ENVIRONMENT=production
