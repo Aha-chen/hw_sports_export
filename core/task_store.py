@@ -19,6 +19,8 @@ class TaskStore:
                     total INTEGER NOT NULL DEFAULT 0,
                     activity TEXT NOT NULL DEFAULT '',
                     results TEXT,
+                    warnings TEXT,
+                    manifest TEXT,
                     error TEXT,
                     message TEXT,
                     download_url TEXT,
@@ -34,6 +36,8 @@ class TaskStore:
                 "worker_id": "TEXT",
                 "claimed_at": "REAL",
                 "attempts": "INTEGER NOT NULL DEFAULT 0",
+                "warnings": "TEXT",
+                "manifest": "TEXT",
             }.items():
                 if name not in columns:
                     conn.execute(f"ALTER TABLE tasks ADD COLUMN {name} {definition}")
@@ -54,6 +58,8 @@ class TaskStore:
             return None
         state = dict(row)
         state["results"] = json.loads(state["results"]) if state["results"] else None
+        state["warnings"] = json.loads(state["warnings"]) if state["warnings"] else []
+        state["manifest"] = json.loads(state["manifest"]) if state["manifest"] else None
         return state
 
     def create(self, task_id, task_token, status="queued"):
@@ -72,15 +78,29 @@ class TaskStore:
     def update(self, task_id, **changes):
         if not changes:
             return False
-        if "results" in changes:
-            changes["results"] = json.dumps(changes["results"], ensure_ascii=False)
+        for json_field in ("results", "warnings", "manifest"):
+            if json_field in changes:
+                changes[json_field] = json.dumps(changes[json_field], ensure_ascii=False)
         changes["updated_at"] = time.time()
-        allowed = {"status", "current", "total", "activity", "results", "error", "message", "download_url", "updated_at"}
+        allowed = {
+            "status",
+            "current",
+            "total",
+            "activity",
+            "results",
+            "warnings",
+            "manifest",
+            "error",
+            "message",
+            "download_url",
+            "updated_at",
+        }
         changes = {key: value for key, value in changes.items() if key in allowed}
         assignments = ", ".join(f"{key} = ?" for key in changes)
         with self._connect() as conn:
+            # assignments 只来自上面的固定白名单，不包含任何用户可控 SQL 标识符。
             cursor = conn.execute(
-                f"UPDATE tasks SET {assignments} WHERE task_id = ?",
+                f"UPDATE tasks SET {assignments} WHERE task_id = ?",  # nosec B608
                 (*changes.values(), task_id),
             )
         return cursor.rowcount == 1
@@ -128,7 +148,9 @@ class TaskStore:
                 "attempts = attempts + 1, updated_at = ? WHERE task_id = ?",
                 (worker_id, now, now, row["task_id"]),
             )
-            claimed = conn.execute("SELECT * FROM tasks WHERE task_id = ?", (row["task_id"],)).fetchone()
+            claimed = conn.execute(
+                "SELECT * FROM tasks WHERE task_id = ?", (row["task_id"],)
+            ).fetchone()
         return self._decode(claimed)
 
     def recover_interrupted(self):

@@ -42,7 +42,8 @@ class StravaStore:
 
     def save(self, session_id, access_token, refresh_token, expires_at, athlete_name=""):
         with self._connect() as conn:
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT INTO strava_sessions
                     (session_id, access_token, refresh_token, expires_at, athlete_name, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?)
@@ -52,7 +53,9 @@ class StravaStore:
                     expires_at=excluded.expires_at,
                     athlete_name=excluded.athlete_name,
                     updated_at=excluded.updated_at
-            """, (session_id, access_token, refresh_token, expires_at, athlete_name, time.time()))
+            """,
+                (session_id, access_token, refresh_token, expires_at, athlete_name, time.time()),
+            )
 
     def delete(self, session_id):
         if not session_id:

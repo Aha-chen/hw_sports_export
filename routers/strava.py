@@ -40,12 +40,15 @@ async def ensure_valid_token(request: Request) -> str:
     expires_at = session.get("expires_at", 0)
     if time.time() >= expires_at:
         async with httpx.AsyncClient() as client:
-            resp = await client.post(STRAVA_TOKEN_URL, data={
-                "client_id": STRAVA_CLIENT_ID,
-                "client_secret": STRAVA_CLIENT_SECRET,
-                "refresh_token": session.get("refresh_token", ""),
-                "grant_type": "refresh_token",
-            })
+            resp = await client.post(
+                STRAVA_TOKEN_URL,
+                data={
+                    "client_id": STRAVA_CLIENT_ID,
+                    "client_secret": STRAVA_CLIENT_SECRET,
+                    "refresh_token": session.get("refresh_token", ""),
+                    "grant_type": "refresh_token",
+                },
+            )
         if resp.status_code != 200:
             strava_session_store.delete(session_id)
             request.session.pop("strava_session_id", None)
@@ -90,15 +93,23 @@ async def strava_authorize(request: Request):
     request.session["strava_oauth_state"] = state
 
     # Build redirect URI from the current request
-    redirect_uri = STRAVA_REDIRECT_URI or (str(request.base_url).rstrip("/") + "/api/strava/callback")
+    redirect_uri = STRAVA_REDIRECT_URI or (
+        str(request.base_url).rstrip("/") + "/api/strava/callback"
+    )
 
-    url = STRAVA_AUTH_URL + "?" + urlencode({
-        "client_id": STRAVA_CLIENT_ID,
-        "response_type": "code",
-        "redirect_uri": redirect_uri,
-        "scope": "activity:write",
-        "state": state,
-    })
+    url = (
+        STRAVA_AUTH_URL
+        + "?"
+        + urlencode(
+            {
+                "client_id": STRAVA_CLIENT_ID,
+                "response_type": "code",
+                "redirect_uri": redirect_uri,
+                "scope": "activity:write",
+                "state": state,
+            }
+        )
+    )
     return {"url": url}
 
 
@@ -106,35 +117,47 @@ async def strava_authorize(request: Request):
 async def strava_callback(request: Request, code: str = "", state: str = "", error: str = ""):
     expected_state = request.session.get("strava_oauth_state", "")
     if not state or not secrets.compare_digest(state, expected_state):
-        return templates.TemplateResponse("strava_callback.html", {
-            "request": request,
-            "success": False,
-            "error": "Invalid state parameter",
-        })
+        return templates.TemplateResponse(
+            "strava_callback.html",
+            {
+                "request": request,
+                "success": False,
+                "error": "Invalid state parameter",
+            },
+        )
     request.session.pop("strava_oauth_state", None)
 
     if error:
-        return templates.TemplateResponse("strava_callback.html", {
-            "request": request,
-            "success": False,
-            "error": error,
-        })
+        return templates.TemplateResponse(
+            "strava_callback.html",
+            {
+                "request": request,
+                "success": False,
+                "error": error,
+            },
+        )
 
     # Exchange code for tokens
     async with httpx.AsyncClient() as client:
-        resp = await client.post(STRAVA_TOKEN_URL, data={
-            "client_id": STRAVA_CLIENT_ID,
-            "client_secret": STRAVA_CLIENT_SECRET,
-            "code": code,
-            "grant_type": "authorization_code",
-        })
+        resp = await client.post(
+            STRAVA_TOKEN_URL,
+            data={
+                "client_id": STRAVA_CLIENT_ID,
+                "client_secret": STRAVA_CLIENT_SECRET,
+                "code": code,
+                "grant_type": "authorization_code",
+            },
+        )
 
     if resp.status_code != 200:
-        return templates.TemplateResponse("strava_callback.html", {
-            "request": request,
-            "success": False,
-            "error": "Failed to exchange authorization code",
-        })
+        return templates.TemplateResponse(
+            "strava_callback.html",
+            {
+                "request": request,
+                "success": False,
+                "error": "Failed to exchange authorization code",
+            },
+        )
 
     data = resp.json()
     athlete = data.get("athlete", {})
@@ -149,11 +172,14 @@ async def strava_callback(request: Request, code: str = "", state: str = "", err
     )
     request.session["strava_session_id"] = session_id
 
-    return templates.TemplateResponse("strava_callback.html", {
-        "request": request,
-        "success": True,
-        "athlete_name": athlete_name,
-    })
+    return templates.TemplateResponse(
+        "strava_callback.html",
+        {
+            "request": request,
+            "success": True,
+            "athlete_name": athlete_name,
+        },
+    )
 
 
 @router.post("/upload")
@@ -164,12 +190,12 @@ async def strava_upload(request: Request):
     task_token = body.get("task_token", "")
 
     # Validate task_id (UUID format)
-    if not re.match(r'^[0-9a-f\-]{36}$', task_id):
+    if not re.match(r"^[0-9a-f\-]{36}$", task_id):
         raise HTTPException(status_code=400, detail="Invalid task ID")
 
     # Validate filename using whitelist regex (TCX format: strava_{sport}_{date}.tcx)
     # 允许的格式：strava_SportType_YYYYMMDD_HHMMSS.tcx 或 Indoor_Running_YYYYMMDD_HHMMSS.tcx
-    if not re.match(r'^[a-zA-Z0-9_\-]+_[0-9]{8}_[0-9]{6}\.tcx$', filename):
+    if not re.match(r"^[a-zA-Z0-9_\-]+_[0-9]{8}_[0-9]{6}\.tcx$", filename):
         raise HTTPException(status_code=400, detail="Invalid filename format")
 
     # 构建文件路径并验证路径安全性
@@ -186,7 +212,9 @@ async def strava_upload(request: Request):
         raise HTTPException(status_code=401, detail="Unauthorized task")
     real_path = os.path.realpath(file_path)
     try:
-        if os.path.commonpath([real_path, os.path.realpath(expected_base)]) != os.path.realpath(expected_base):
+        if os.path.commonpath([real_path, os.path.realpath(expected_base)]) != os.path.realpath(
+            expected_base
+        ):
             raise ValueError
     except ValueError:
         raise HTTPException(status_code=400, detail="Path traversal detected")

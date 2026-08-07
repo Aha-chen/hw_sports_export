@@ -17,6 +17,16 @@ const i18n = {
         btn_loading: '数据解析中...',
         error_title: '处理失败',
         no_activities: '没有找到可转换的 Activities。请确认 ZIP 文件来自华为运动健康，并检查解压密码是否正确。',
+        no_matching_activities: '所选日期范围内没有可转换的活动，请调整日期后重试。',
+        incorrect_password: '解压密码不正确，请检查后重试。',
+        invalid_archive: 'ZIP 文件无效、已损坏或格式不受支持。',
+        unsupported_schema: '该华为导出文件的数据结构暂不受支持。',
+        parse_failed: '运动数据解析失败，请检查文件或稍后重试。',
+        upload_too_large: '文件超过 2GB 上传限制。',
+        archive_limit: '压缩包内容超过允许的资源限制。',
+        task_unavailable: '任务不存在、已过期或当前链接无权访问。',
+        task_timeout: '任务长时间没有进度，请重新提交。',
+        partial_warning: '发现 {count} 个问题；其余结果仍可下载。',
         date_range_error: '截止日期必须大于或等于开始日期。',
         invalid_date_error: '日期格式无效，请重新选择日期。',
         success_desc: '您的 TCX 文件已准备就绪！它们包含了精确的 GPS 坐标、心率曲线和步频数据，可以直接导入 Strava。',
@@ -67,6 +77,16 @@ const i18n = {
         btn_loading: 'Extracting Data...',
         error_title: 'Processing Failed',
         no_activities: 'No convertible Activities were found. Check that the ZIP came from Huawei Health and that the extraction password is correct.',
+        no_matching_activities: 'No convertible activities were found in the selected date range. Adjust the dates and try again.',
+        incorrect_password: 'The extraction password is incorrect. Check it and try again.',
+        invalid_archive: 'The ZIP archive is invalid, corrupted, or unsupported.',
+        unsupported_schema: 'This Huawei export schema is not supported yet.',
+        parse_failed: 'The activity data could not be processed. Check the archive and try again.',
+        upload_too_large: 'The file exceeds the 2GB upload limit.',
+        archive_limit: 'The archive exceeds the allowed resource limits.',
+        task_unavailable: 'The task is missing, expired, or unavailable through this link.',
+        task_timeout: 'The task made no progress for too long. Submit it again.',
+        partial_warning: '{count} issue(s) found; remaining results are still available.',
         date_range_error: 'The end date must be on or after the start date.',
         invalid_date_error: 'Invalid date format. Please select the date again.',
         success_desc: 'Your TCX files are ready for Strava. They contain precise timestamps, GPS coordinates, heart rate, and cadence data.',
@@ -268,6 +288,7 @@ document.addEventListener('alpine:init', () => {
         status: 'idle', // idle, loading, success
         error: null,
         results: [],
+        warnings: [],
         resultMessage: '',
         downloadUrl: '',
         taskId: null,
@@ -664,7 +685,7 @@ document.addEventListener('alpine:init', () => {
             if (this.endDate) formData.append('end_date', this.endDate);
 
             try {
-                // Phase 1: Upload file, get task_id back immediately
+                // 上传成功后立即获得任务标识，实际解析由独立 worker 完成。
                 const uploadResp = await fetch('/api/parse', {
                     method: 'POST',
                     body: formData
@@ -672,16 +693,14 @@ document.addEventListener('alpine:init', () => {
                 const uploadData = await uploadResp.json();
 
                 if (!uploadResp.ok || uploadData.status === 'error') {
-                    this.error = uploadData.message || 'Upload failed';
-                    this.status = 'idle';
-                    return;
+                    throw new Error(uploadData.code || uploadData.message || 'UPLOAD_FAILED');
                 }
 
                 const taskId = uploadData.task_id;
                 this.taskId = taskId;
                 this.taskToken = uploadData.task_token;
 
-                // Phase 2: Listen for progress via SSE
+                // SSE 断线时有限重连，避免短暂网络波动导致任务结果丢失。
                 const result = await new Promise((resolve, reject) => {
                     let es = null;
                     let reconnects = 0;
@@ -696,7 +715,7 @@ document.addEventListener('alpine:init', () => {
                                 total: data.total || 0,
                                 activity: data.activity || ''
                             };
-                            if (data.status === 'success') {
+                            if (data.status === 'success' || data.status === 'partial_success') {
                                 settled = true;
                                 es.close();
                                 if (!Array.isArray(data.results) || data.results.length === 0) {
@@ -726,6 +745,7 @@ document.addEventListener('alpine:init', () => {
                 });
 
                 this.results = result.results;
+                this.warnings = Array.isArray(result.warnings) ? result.warnings : [];
                 this.resultMessage = result.message;
                 this.downloadUrl = result.download_url;
                 this.selectedItems = [];
@@ -733,9 +753,29 @@ document.addEventListener('alpine:init', () => {
 
                 setTimeout(() => { this.status = 'success'; }, 300);
             } catch (err) {
-                this.error = err.message === 'NO_ACTIVITIES'
-                    ? this.t.no_activities
-                    : (err.message || (this.lang === 'zh' ? "网络连接错误，请重试。" : "Connection error. Please try again."));
+                const parseErrors = {
+                    NO_ACTIVITIES: this.t.no_activities,
+                    NO_MATCHING_ACTIVITIES: this.t.no_matching_activities,
+                    INCORRECT_PASSWORD: this.t.incorrect_password,
+                    INVALID_ARCHIVE: this.t.invalid_archive,
+                    UNSUPPORTED_EXPORT_SCHEMA: this.t.unsupported_schema,
+                    UPLOAD_TOO_LARGE: this.t.upload_too_large,
+                    ARCHIVE_LIMIT_EXCEEDED: this.t.archive_limit,
+                    INVALID_DATE: this.t.invalid_date_error,
+                    INVALID_DATE_RANGE: this.t.date_range_error,
+                    INVALID_TASK_ID: this.t.task_unavailable,
+                    TASK_NOT_FOUND: this.t.task_unavailable,
+                    TASK_UNAUTHORIZED: this.t.task_unavailable,
+                    TASK_TIMEOUT: this.t.task_timeout,
+                    DATA_FILE_INVALID: this.t.parse_failed,
+                    DATA_FILE_READ_FAILED: this.t.parse_failed,
+                    ACTIVITY_PARSE_FAILED: this.t.parse_failed,
+                    PARSE_FAILED: this.t.parse_failed,
+                    INTERNAL_ERROR: this.t.parse_failed
+                };
+                this.error = parseErrors[err.message]
+                    || err.message
+                    || (this.lang === 'zh' ? "网络连接错误，请重试。" : "Connection error. Please try again.");
                 this.status = 'idle';
             }
         },
@@ -745,6 +785,7 @@ document.addEventListener('alpine:init', () => {
             this.$refs.fileInput.value = '';
             this.status = 'idle';
             this.results = [];
+            this.warnings = [];
             this.currentPage = 1;
             this.sportFilter = 'all';
             this.selectedItems = [];
