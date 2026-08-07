@@ -33,6 +33,8 @@ package = false
 required-version = ">=0.11.32"
 
 [tool.pytest.ini_options]
+# package = false 时项目不会装进 venv；显式加入仓库根，保证 CI/uv run 能 import core、app。
+pythonpath = ["."]
 asyncio_default_fixture_loop_scope = "function"
 
 [tool.ruff]
