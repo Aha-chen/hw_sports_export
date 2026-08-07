@@ -13,11 +13,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Development Commands
 
 ```bash
-# 安装依赖
-pip install -r requirements.txt
+# 安装锁定的开发依赖
+uv sync --all-groups
 
 # 本地开发运行
-python -m uvicorn app:app --reload --port 8000
+uv run uvicorn app:app --reload --port 8000
+
+# 完整本地门禁
+make check
 
 # Docker 部署
 docker compose up -d
@@ -60,3 +63,10 @@ docker compose up -d
 - 临时文件存储在 `temp/` 目录，自动清理超过 1 小时的文件
 - 最大上传文件 2GB，并发解析限制 3 个任务
 - 前端依赖已本地化，无需外网访问即可运行
+
+## Code Comments
+
+- 新增或修改的业务代码注释、docstring 以中文为主；代码标识、协议名和必要术语可保留英文。
+- 优先注释业务原因、数据单位、格式兼容、边界条件、状态转换、异常降级以及安全约束，不要逐行复述代码。
+- 修改相关行为时同步更新注释；不保留大段注释掉的旧代码，也不使用含糊的 `TODO` 代替 Issue 或设计说明。
+- 注释以降低后续理解和误改成本为目标，不追求数量；详细规则见 `docs/SPEC.md` 第 11 节。

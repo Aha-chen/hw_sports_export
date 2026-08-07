@@ -36,8 +36,8 @@ The upload endpoint checks the number of ZIP entries, individual uncompressed si
 
 ### Requirements
 
-- Python 3.11 or later
-- pip
+- Python 3.11 or 3.12
+- [uv](https://docs.astral.sh/uv/)
 
 ### Local installation
 
@@ -45,24 +45,19 @@ The upload endpoint checks the number of ZIP entries, individual uncompressed si
 git clone https://github.com/Aha-chen/hw_sports_export.git
 cd hw_sports_export
 
-python -m venv venv
-source venv/bin/activate  # macOS / Linux
-# venv\Scripts\activate  # Windows
-
-pip install -r requirements.txt
+uv sync --all-groups
 ```
 
 Start the API server:
 
 ```bash
-python -m uvicorn app:app --reload --port 8000
+uv run uvicorn app:app --reload --port 8000
 ```
 
 In a second terminal, start the parser worker:
 
 ```bash
-source venv/bin/activate  # Use venv\Scripts\activate on Windows
-python worker.py
+uv run python worker.py
 ```
 
 Open `http://127.0.0.1:8000`.
@@ -82,13 +77,21 @@ docker compose up -d
 
 Keep `COOKIE_SECURE=0` for local HTTP use. Set it to `1` when deploying over HTTPS.
 
+To run the resource-limited Nginx example:
+
+```bash
+docker compose -f docker-compose.yml -f deploy/docker-compose.proxy.yml up -d
+```
+
+Open `http://127.0.0.1:8080`. `deploy/nginx.conf` limits request size, upload rate, per-IP concurrency, and timeouts. Add TLS and authentication before a public deployment.
+
 ## Usage
 
 1. Request a Huawei Health export from the [Huawei Privacy Center](https://privacy.consumer.huawei.com/tool).
 2. Download the resulting ZIP archive and keep the extraction password supplied by Huawei.
 3. Upload the ZIP file, enter the password, and optionally choose a date range.
 4. Wait for processing to finish, then review activity types, distances, and data previews.
-5. Download the generated TCX archive and import it from the [Strava upload page](https://www.strava.com/upload/select), or configure OAuth for direct upload.
+5. Download the generated TCX archive and import it from the [Strava upload page](https://www.strava.com/upload/select), or configure OAuth for direct upload. The included `manifest.json` records successful, skipped, and failed counts together with structured issues.
 
 ## Direct Strava upload (optional)
 
@@ -125,9 +128,11 @@ The API and worker coordinate through `temp/tasks.sqlite3`, with files stored un
 ## Development and validation
 
 ```bash
-pip install -r requirements-dev.txt
-pytest -q
+uv sync --all-groups
+make check
 ```
+
+`pyproject.toml` is the single dependency source and `uv.lock` fixes the complete dependency set. `make check` verifies the lock and runs Ruff, Bandit, tests, and a runtime dependency audit. Run `make docker` to validate the container build separately.
 
 The service health endpoint is `GET /healthz`.
 

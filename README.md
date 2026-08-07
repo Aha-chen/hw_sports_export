@@ -36,8 +36,8 @@
 
 ### 环境要求
 
-- Python 3.11 或更高版本
-- pip
+- Python 3.11 或 3.12
+- [uv](https://docs.astral.sh/uv/)
 
 ### 本地运行
 
@@ -45,24 +45,19 @@
 git clone https://github.com/Aha-chen/hw_sports_export.git
 cd hw_sports_export
 
-python -m venv venv
-source venv/bin/activate  # macOS / Linux
-# venv\Scripts\activate  # Windows
-
-pip install -r requirements.txt
+uv sync --all-groups
 ```
 
 启动 API 服务：
 
 ```bash
-python -m uvicorn app:app --reload --port 8000
+uv run uvicorn app:app --reload --port 8000
 ```
 
 另开一个终端并启动解析 worker：
 
 ```bash
-source venv/bin/activate  # Windows 请使用 venv\Scripts\activate
-python worker.py
+uv run python worker.py
 ```
 
 访问 `http://127.0.0.1:8000`。
@@ -82,13 +77,21 @@ docker compose up -d
 
 本机通过 HTTP 使用时保留 `COOKIE_SECURE=0`；部署到 HTTPS 后应设置为 `1`。
 
+若需要通过带资源保护的 Nginx 示例访问，可运行：
+
+```bash
+docker compose -f docker-compose.yml -f deploy/docker-compose.proxy.yml up -d
+```
+
+随后访问 `http://127.0.0.1:8080`。示例配置位于 `deploy/nginx.conf`，包含请求体、上传速率、单 IP 并发和超时限制；正式公网部署仍需补充 TLS 与身份认证。
+
 ## 使用方法
 
 1. 在[华为隐私中心](https://privacy.consumer.huawei.com/tool)申请导出运动健康数据。
 2. 下载导出的 ZIP 文件并记录华为提供的解压密码。
 3. 在本项目页面上传 ZIP 文件、输入密码，并按需设置日期范围。
 4. 等待解析完成，检查活动类型、距离和数据曲线。
-5. 下载生成的 TCX 压缩包，并在 [Strava 上传页面](https://www.strava.com/upload/select)批量导入；也可以配置 Strava OAuth 后直接上传。
+5. 下载生成的 TCX 压缩包，并在 [Strava 上传页面](https://www.strava.com/upload/select)批量导入；也可以配置 Strava OAuth 后直接上传。压缩包中的 `manifest.json` 会记录成功、跳过、失败数量和结构化问题。
 
 ## Strava 直传配置（可选）
 
@@ -125,9 +128,11 @@ API 与 worker 通过 `temp/tasks.sqlite3` 协作，文件存储在对应任务�
 ## 开发与验证
 
 ```bash
-pip install -r requirements-dev.txt
-pytest -q
+uv sync --all-groups
+make check
 ```
+
+`pyproject.toml` 是依赖配置的唯一来源，`uv.lock` 固定完整依赖集合。`make check` 会检查 lock 一致性，并依次执行 Ruff、Bandit、自动测试和运行依赖漏洞审计；`make docker` 可额外验证容器构建。
 
 服务健康检查地址为 `GET /healthz`。
 
